@@ -43,6 +43,7 @@ Below is a simplified diagram of how the services interact with each other:
                 +------------------------+
                 |    postgres_data        |
                 +------------------------+
+* Video with explanation how is working the project:[https://www.loom.com/share/dde6545c501e4518ad834fd4eda9c849?sid=8eda2416-9929-4172-9f3e-59563d803560]
 
 * Ruby version
 3.3.6
