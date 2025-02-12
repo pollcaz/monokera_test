@@ -1,0 +1,79 @@
+services:
+  # Microservicio de clientes (customer_service) escucha en el puerto 3000 dentro del contenedor, mapeado al puerto 3000 del host
+  customer_service:
+    build:
+      context: ./customer_service
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"  # Exponemos el puerto 3000 del contenedor al puerto 3000 del host
+    environment:
+      - RAILS_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@db:5432/customer_service
+      - RABBITMQ_URL=rabbitmq:5672
+    networks:
+      - mynetwork  
+    depends_on:
+      - db
+      - rabbitmq
+    command: bash -c "/rails/wait_for_rabbitmq.sh && bundle exec rake db:prepare && bundle exec rails server -b '0.0.0.0'" # El script de la DB solo en customer_service
+
+  # Worker que escucha la cola de RabbitMQ
+  worker:
+    build:
+      context: ./customer_service
+    environment:
+      - RAILS_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@db:5432/customer_service
+      - RABBITMQ_URL=rabbitmq:5672
+    networks:
+      - mynetwork
+    command: bundle exec rake orders_counter_worker:start  # Ejecutamos el worker al levantar el contenedor
+    depends_on:
+      - rabbitmq
+      - db
+      - customer_service
+
+  # Microservicio de pedidos (order_service) escucha en el puerto 3000 dentro del contenedor, pero en el host lo mapeamos al 3001
+  order_service:
+    build:
+      context: ./order_service
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - RAILS_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@db:5432/order_service
+      - RABBITMQ_URL=rabbitmq:5672
+    networks:
+      - mynetwork
+    depends_on:
+      - rabbitmq
+      - db
+    command: bash -c "/rails/wait_for_rabbitmq.sh && bundle exec rake db:prepare && bundle exec rails server -b '0.0.0.0' -p 3001"
+
+  # Base de datos PostgreSQL
+  db:
+    image: postgres:14.15
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: password
+    networks:
+      - mynetwork
+
+  # RabbitMQ
+  rabbitmq:
+    image: "rabbitmq:management"
+    ports:
+      - "15672:15672"  # Interfaz de gestión (web)
+      - "5672:5672"    # Puerto estándar de RabbitMQ para mensajería
+    networks:
+      - mynetwork
+
+networks:
+  mynetwork:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
